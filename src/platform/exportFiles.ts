@@ -5,6 +5,7 @@ import { writeFile } from "@tauri-apps/plugin-fs";
 
 export interface ExportTarget {
   save: (fileName: string, blob: Blob) => Promise<void>;
+  nativePath?: (fileName: string) => Promise<string>;
 }
 
 function downloadInBrowser(fileName: string, blob: Blob): void {
@@ -25,6 +26,7 @@ export async function chooseExportTarget(): Promise<ExportTarget | null> {
   if (!directory) return null;
 
   return {
+    nativePath: (fileName) => join(directory, fileName),
     save: async (fileName, blob) => {
       const outputPath = await join(directory, fileName);
       await writeFile(outputPath, new Uint8Array(await blob.arrayBuffer()));

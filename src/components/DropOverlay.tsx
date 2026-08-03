@@ -5,9 +5,16 @@ interface DropOverlayProps {
   nativePicker: boolean;
   onFile: (file: File) => void;
   onNativePick: () => void;
+  onNativeBatch: () => void;
 }
 
-export function DropOverlay({ busy, nativePicker, onFile, onNativePick }: DropOverlayProps) {
+export function DropOverlay({
+  busy,
+  nativePicker,
+  onFile,
+  onNativePick,
+  onNativeBatch,
+}: DropOverlayProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -44,6 +51,11 @@ export function DropOverlay({ busy, nativePicker, onFile, onNativePick }: DropOv
         disabled={busy}
         onChange={(event) => acceptFile(event.target.files?.[0])}
       />
+      {nativePicker && (
+        <button className="drop-folder" type="button" disabled={busy} onClick={onNativeBatch}>
+          FOLDER+
+        </button>
+      )}
     </>
   );
 }

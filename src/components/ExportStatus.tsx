@@ -1,7 +1,7 @@
-import type { ExportProgress } from "../application/exportAnimation";
+import type { BatchExportProgress } from "../application/exportBatch";
 
 interface ExportStatusProps {
-  progress: ExportProgress;
+  progress: BatchExportProgress;
   onCancel: () => void;
 }
 
@@ -11,7 +11,9 @@ export function ExportStatus({ progress, onCancel }: ExportStatusProps) {
     <div className="export-status" role="status">
       <div className="progress-copy">
         <strong>{percent}%</strong>
-        <span>{progress.angle}°</span>
+        <span title={progress.sourceName}>
+          {progress.sourceIndex + 1}/{progress.sourceCount} · {progress.angle}°
+        </span>
       </div>
       <div className="progress-track" aria-label={`تم ${percent}%`}>
         <span style={{ width: `${percent}%` }} />

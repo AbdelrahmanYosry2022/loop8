@@ -1,4 +1,5 @@
 import type { LoopCount, ViewAngle } from "../domain/angles";
+import type { BackgroundMode, ExportFps } from "../domain/exportSettings";
 import type { FbxPreviewEngine } from "./FbxPreviewEngine";
 
 export interface RecordingFormat {
@@ -6,7 +7,7 @@ export interface RecordingFormat {
   extension: "mp4" | "webm";
 }
 
-const MIME_TYPES: RecordingFormat[] = [
+const OPAQUE_MIME_TYPES: RecordingFormat[] = [
   { mimeType: "video/mp4;codecs=avc1.42E01E", extension: "mp4" },
   { mimeType: "video/mp4", extension: "mp4" },
   { mimeType: "video/webm;codecs=vp9", extension: "webm" },
@@ -14,8 +15,15 @@ const MIME_TYPES: RecordingFormat[] = [
   { mimeType: "video/webm", extension: "webm" },
 ];
 
-export function selectRecordingFormat(): RecordingFormat {
-  const format = MIME_TYPES.find(({ mimeType }) => MediaRecorder.isTypeSupported(mimeType));
+export function recordingFormatCandidates(background: BackgroundMode): RecordingFormat[] {
+  return background === "transparent" ? [] : OPAQUE_MIME_TYPES;
+}
+
+export function selectRecordingFormat(background: BackgroundMode): RecordingFormat {
+  const format = recordingFormatCandidates(background).find(({ mimeType }) =>
+    MediaRecorder.isTypeSupported(mimeType),
+  );
+  if (!format && background === "transparent") throw new Error("استخدم مسار Alpha الأصلي للتصدير الشفاف");
   if (!format) throw new Error("الجهاز مش بيدعم تسجيل الفيديو من المعاينة");
   return format;
 }
@@ -24,6 +32,8 @@ interface RecordOptions {
   engine: FbxPreviewEngine;
   angle: ViewAngle;
   loops: LoopCount;
+  fps: ExportFps;
+  background: BackgroundMode;
   signal: AbortSignal;
   onProgress: (progress: number) => void;
 }
@@ -32,6 +42,8 @@ export async function recordView({
   engine,
   angle,
   loops,
+  fps,
+  background,
   signal,
   onProgress,
 }: RecordOptions): Promise<{ blob: Blob; format: RecordingFormat }> {
@@ -39,12 +51,12 @@ export async function recordView({
     throw new Error("نسخة النظام الحالية مش بتدعم تسجيل Canvas");
   }
 
-  const format = selectRecordingFormat();
+  const format = selectRecordingFormat(background);
   const totalSeconds = engine.duration * loops;
   engine.setAngle(angle);
   engine.renderAt(0);
 
-  const stream = engine.canvas.captureStream(30);
+  const stream = engine.canvas.captureStream(fps);
   const recorder = new MediaRecorder(stream, {
     mimeType: format.mimeType,
     videoBitsPerSecond: 8_000_000,
@@ -73,7 +85,7 @@ export async function recordView({
         }
 
         const elapsed = (now - startedAt) / 1000;
-        const bounded = Math.min(elapsed, Math.max(totalSeconds - 1 / 30, 0));
+        const bounded = Math.min(elapsed, Math.max(totalSeconds - 1 / fps, 0));
         engine.renderAt(bounded);
         onProgress(Math.min(elapsed / totalSeconds, 1));
 

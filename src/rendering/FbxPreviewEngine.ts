@@ -19,6 +19,7 @@ import {
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import type { ViewAngle } from "../domain/angles";
 import { lockHorizontalRootMotion } from "../domain/animation";
+import type { BackgroundMode, ExportResolution } from "../domain/exportSettings";
 
 export interface FbxMetadata {
   clipName: string;
@@ -33,23 +34,32 @@ export class FbxPreviewEngine {
   private readonly turntable = new Group();
   private readonly clock = new Clock();
   private readonly observer: ResizeObserver;
+  private floor: Mesh | null = null;
   private model: Group | null = null;
   private mixer: AnimationMixer | null = null;
   private animationDuration = 0;
   private animationFrame = 0;
   private playing = false;
+  private exportMode = false;
+  private backgroundMode: BackgroundMode = "studio";
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.renderer = new WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+    this.renderer = new WebGLRenderer({
+      canvas,
+      alpha: true,
+      antialias: true,
+      premultipliedAlpha: false,
+      preserveDrawingBuffer: true,
+    });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = true;
-    this.scene.background = new Color("#dfe3e6");
     this.scene.add(this.turntable);
     this.addStudio();
+    this.applyBackground("studio");
 
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(canvas);
@@ -98,11 +108,51 @@ export class FbxPreviewEngine {
     this.render();
   }
 
+  setBackground(mode: BackgroundMode): void {
+    this.backgroundMode = mode;
+    this.applyBackground(mode);
+    this.render();
+  }
+
+  prepareExport(resolution: ExportResolution, background: BackgroundMode): void {
+    this.pause();
+    this.exportMode = true;
+    this.renderer.setPixelRatio(1);
+    this.renderer.setSize(resolution, resolution, false);
+    this.camera.aspect = 1;
+    this.camera.updateProjectionMatrix();
+    this.applyBackground(background);
+    this.render();
+  }
+
+  finishExport(): void {
+    this.exportMode = false;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.applyBackground(this.backgroundMode);
+    this.resize();
+    this.play();
+  }
+
   renderAt(seconds: number): void {
     if (this.mixer && this.animationDuration > 0) {
       this.mixer.setTime(Math.max(0, seconds % this.animationDuration));
     }
     this.render();
+  }
+
+  readRgbaFrame(): Uint8Array {
+    const gl = this.renderer.getContext();
+    const width = this.canvas.width;
+    const height = this.canvas.height;
+    const rowBytes = width * 4;
+    const source = new Uint8Array(rowBytes * height);
+    const flipped = new Uint8Array(source.length);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    for (let row = 0; row < height; row += 1) {
+      const sourceOffset = (height - row - 1) * rowBytes;
+      flipped.set(source.subarray(sourceOffset, sourceOffset + rowBytes), row * rowBytes);
+    }
+    return flipped;
   }
 
   play(): void {
@@ -143,13 +193,24 @@ export class FbxPreviewEngine {
     fill.position.set(-4, 3, 2);
     this.scene.add(fill);
 
-    const floor = new Mesh(
+    this.floor = new Mesh(
       new PlaneGeometry(40, 40),
       new MeshStandardMaterial({ color: "#c8ced2", roughness: 0.92 }),
     );
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    this.scene.add(floor);
+    this.floor.rotation.x = -Math.PI / 2;
+    this.floor.receiveShadow = true;
+    this.scene.add(this.floor);
+  }
+
+  private applyBackground(mode: BackgroundMode): void {
+    if (this.floor) this.floor.visible = mode === "studio";
+    if (mode === "transparent") {
+      this.scene.background = null;
+      this.renderer.setClearAlpha(0);
+    } else {
+      this.scene.background = new Color(mode === "green" ? "#00ff00" : "#dfe3e6");
+      this.renderer.setClearAlpha(1);
+    }
   }
 
   private normalizeModel(object: Group): void {
@@ -171,6 +232,7 @@ export class FbxPreviewEngine {
   }
 
   private resize(): void {
+    if (this.exportMode) return;
     const width = Math.max(this.canvas.clientWidth, 1);
     const height = Math.max(this.canvas.clientHeight, 1);
     this.renderer.setSize(width, height, false);
