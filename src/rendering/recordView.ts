@@ -56,7 +56,7 @@ export async function recordView({
   engine.setAngle(angle);
   engine.renderAt(0);
 
-  const stream = engine.canvas.captureStream(fps);
+  const stream = engine.recordingCanvas.captureStream(fps);
   const recorder = new MediaRecorder(stream, {
     mimeType: format.mimeType,
     videoBitsPerSecond: 8_000_000,

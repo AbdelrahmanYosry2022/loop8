@@ -31,9 +31,11 @@ export class FbxPreviewEngine {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(32, 1, 0.01, 1000);
+  private readonly exportCamera = new PerspectiveCamera(32, 1, 0.01, 1000);
   private readonly turntable = new Group();
   private readonly clock = new Clock();
   private readonly observer: ResizeObserver;
+  private exportRenderer: WebGLRenderer | null = null;
   private floor: Mesh | null = null;
   private model: Group | null = null;
   private mixer: AnimationMixer | null = null;
@@ -52,11 +54,8 @@ export class FbxPreviewEngine {
       premultipliedAlpha: false,
       preserveDrawingBuffer: true,
     });
+    this.configureRenderer(this.renderer);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.outputColorSpace = SRGBColorSpace;
-    this.renderer.toneMapping = ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
-    this.renderer.shadowMap.enabled = true;
     this.scene.add(this.turntable);
     this.addStudio();
     this.applyBackground("studio");
@@ -69,6 +68,11 @@ export class FbxPreviewEngine {
 
   get duration(): number {
     return this.animationDuration;
+  }
+
+  get recordingCanvas(): HTMLCanvasElement {
+    if (!this.exportRenderer) throw new Error("محرك التصدير مش جاهز");
+    return this.exportRenderer.domElement;
   }
 
   async load(buffer: ArrayBuffer): Promise<FbxMetadata> {
@@ -117,17 +121,18 @@ export class FbxPreviewEngine {
   prepareExport(resolution: ExportResolution, background: BackgroundMode): void {
     this.pause();
     this.exportMode = true;
-    this.renderer.setPixelRatio(1);
-    this.renderer.setSize(resolution, resolution, false);
-    this.camera.aspect = 1;
-    this.camera.updateProjectionMatrix();
+    const exportRenderer = this.getExportRenderer();
+    exportRenderer.setPixelRatio(1);
+    exportRenderer.setSize(resolution, resolution, false);
+    this.exportCamera.copy(this.camera);
+    this.exportCamera.aspect = 1;
+    this.exportCamera.updateProjectionMatrix();
     this.applyBackground(background);
     this.render();
   }
 
   finishExport(): void {
     this.exportMode = false;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.applyBackground(this.backgroundMode);
     this.resize();
     this.play();
@@ -141,9 +146,10 @@ export class FbxPreviewEngine {
   }
 
   readRgbaFrame(): Uint8Array {
-    const gl = this.renderer.getContext();
-    const width = this.canvas.width;
-    const height = this.canvas.height;
+    if (!this.exportRenderer) throw new Error("محرك Alpha مش جاهز");
+    const gl = this.exportRenderer.getContext();
+    const width = this.exportRenderer.domElement.width;
+    const height = this.exportRenderer.domElement.height;
     const rowBytes = width * 4;
     const source = new Uint8Array(rowBytes * height);
     const flipped = new Uint8Array(source.length);
@@ -178,7 +184,28 @@ export class FbxPreviewEngine {
     this.pause();
     this.observer.disconnect();
     this.removeCurrentModel();
+    this.exportRenderer?.dispose();
     this.renderer.dispose();
+  }
+
+  private configureRenderer(renderer: WebGLRenderer): void {
+    renderer.outputColorSpace = SRGBColorSpace;
+    renderer.toneMapping = ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.shadowMap.enabled = true;
+  }
+
+  private getExportRenderer(): WebGLRenderer {
+    if (!this.exportRenderer) {
+      this.exportRenderer = new WebGLRenderer({
+        alpha: true,
+        antialias: true,
+        premultipliedAlpha: false,
+        preserveDrawingBuffer: true,
+      });
+      this.configureRenderer(this.exportRenderer);
+    }
+    return this.exportRenderer;
   }
 
   private addStudio(): void {
@@ -207,9 +234,11 @@ export class FbxPreviewEngine {
     if (mode === "transparent") {
       this.scene.background = null;
       this.renderer.setClearAlpha(0);
+      this.exportRenderer?.setClearAlpha(0);
     } else {
       this.scene.background = new Color(mode === "green" ? "#00ff00" : "#dfe3e6");
       this.renderer.setClearAlpha(1);
+      this.exportRenderer?.setClearAlpha(1);
     }
   }
 
@@ -242,6 +271,10 @@ export class FbxPreviewEngine {
   }
 
   private render(): void {
+    if (this.exportMode && this.exportRenderer) {
+      this.exportRenderer.render(this.scene, this.exportCamera);
+      return;
+    }
     this.renderer.render(this.scene, this.camera);
   }
 
