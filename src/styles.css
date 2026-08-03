@@ -1,0 +1,179 @@
+:root {
+  font-family: "SF Arabic", "Geeza Pro", system-ui, sans-serif;
+  color: #f4f1ec;
+  background: #11100f;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 720px; min-height: 560px; overflow: hidden; }
+button { font: inherit; }
+button:focus-visible { outline: 2px solid #ff7a2f; outline-offset: 3px; }
+
+.app-shell {
+  display: grid;
+  grid-template-rows: 68px minmax(0, 1fr) 92px;
+  min-height: 100vh;
+  padding: 0 28px;
+  background: #11100f;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  direction: ltr;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: .16em;
+  color: #f3efe9;
+}
+
+.brand span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 50%;
+  color: #17130f;
+  background: #ff7a2f;
+  letter-spacing: 0;
+}
+
+.file-name {
+  max-width: 56vw;
+  overflow: hidden;
+  border: 0;
+  color: #a7a29b;
+  background: transparent;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #dfe3e6;
+}
+
+.preview-canvas { display: block; width: 100%; height: 100%; }
+
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  width: 100%;
+  border: 0;
+  color: #27231f;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.drop-overlay.is-dragging { background: rgba(255, 122, 47, .12); }
+.drop-plus {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border: 2px solid #27231f;
+  border-radius: 50%;
+  font: 400 38px/1 ui-rounded, system-ui, sans-serif;
+}
+.drop-overlay strong { font-size: 18px; }
+
+.angle-rail {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 999px;
+  background: rgba(17, 16, 15, .86);
+  backdrop-filter: blur(12px);
+  transform: translateX(-50%);
+}
+
+.angle-rail button,
+.loops button {
+  border: 0;
+  color: #aaa59e;
+  background: transparent;
+  cursor: pointer;
+}
+
+.angle-rail button {
+  min-width: 56px;
+  padding: 9px 10px;
+  border-radius: 999px;
+  font: 600 12px ui-rounded, system-ui, sans-serif;
+}
+
+.angle-rail button.is-active { color: #17130f; background: #f4f1ec; }
+
+.control-bar,
+.export-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  direction: ltr;
+}
+
+.loops { display: flex; align-items: center; gap: 8px; }
+.loops span { margin-right: 8px; color: #77726c; font: 600 11px ui-rounded, system-ui, sans-serif; letter-spacing: .15em; }
+.loops button { width: 36px; height: 36px; border-radius: 50%; }
+.loops button.is-active { color: #17130f; background: #f4f1ec; }
+
+.export-button {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 22px;
+  border: 0;
+  border-radius: 999px;
+  color: #17130f;
+  background: #ff7a2f;
+  font-weight: 700;
+  cursor: pointer;
+}
+.export-button:disabled { opacity: .5; cursor: wait; }
+.export-button span { font-size: 20px; }
+
+.toast {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  padding: 10px 16px;
+  border-radius: 999px;
+  color: #f4f1ec;
+  background: #17130f;
+  transform: translateX(-50%);
+  font-size: 13px;
+}
+.toast.is-error { background: #aa2e25; }
+
+.export-status { gap: 18px; }
+.progress-copy { display: flex; min-width: 86px; align-items: baseline; gap: 10px; }
+.progress-copy strong { font: 700 24px ui-rounded, system-ui, sans-serif; }
+.progress-copy span { color: #8c8780; font-size: 12px; }
+.progress-track { flex: 1; height: 3px; overflow: hidden; background: #3a3733; }
+.progress-track span { display: block; height: 100%; background: #ff7a2f; transition: width 100ms linear; }
+.export-status button { border: 0; color: #aaa59e; background: transparent; cursor: pointer; }
+
+@media (max-width: 860px) {
+  .app-shell { padding: 0 18px; }
+  .angle-rail button { min-width: 46px; padding-inline: 7px; }
+}
