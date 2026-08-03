@@ -8,6 +8,7 @@ interface ControlBarProps {
   settings: ExportSettings;
   sourceCount: number;
   disabled: boolean;
+  onAdd: () => void;
   onBatch: () => void;
   onLoopsChange: (loops: LoopCount) => void;
   onSettingsChange: (settings: ExportSettings) => void;
@@ -19,6 +20,7 @@ export function ControlBar({
   settings,
   sourceCount,
   disabled,
+  onAdd,
   onBatch,
   onLoopsChange,
   onSettingsChange,
@@ -44,6 +46,9 @@ export function ControlBar({
             </button>
           ))}
         </div>
+        <button className="tool-button" type="button" disabled={disabled} onClick={onAdd}>
+          + FBX
+        </button>
         <button className="tool-button" type="button" disabled={disabled} onClick={onBatch}>
           FOLDER+
         </button>

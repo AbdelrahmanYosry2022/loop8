@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { LoopCount, ViewAngle } from "../domain/angles";
-import type { ExportFps, ExportResolution } from "../domain/exportSettings";
+import type { ExportFps, ExportResolution, VideoQuality } from "../domain/exportSettings";
 import type { FbxPreviewEngine } from "./FbxPreviewEngine";
 
 interface RecordAlphaOptions {
@@ -10,6 +10,7 @@ interface RecordAlphaOptions {
   fps: ExportFps;
   resolution: ExportResolution;
   outputPath: string;
+  quality: VideoQuality;
   signal: AbortSignal;
   onProgress: (progress: number) => void;
 }
@@ -21,6 +22,7 @@ export async function recordAlphaView({
   fps,
   resolution,
   outputPath,
+  quality,
   signal,
   onProgress,
 }: RecordAlphaOptions): Promise<void> {
@@ -37,6 +39,7 @@ export async function recordAlphaView({
     width: resolution,
     height: resolution,
     fps,
+    quality,
   });
 
   try {
@@ -45,6 +48,7 @@ export async function recordAlphaView({
       engine.renderAt(Math.min(frame / fps, Math.max(totalSeconds - 1 / fps, 0)));
       await invoke("write_alpha_frame", engine.readRgbaFrame());
       onProgress((frame + 1) / frameCount);
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
     await invoke("finish_alpha_export");
   } catch (error) {

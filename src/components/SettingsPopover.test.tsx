@@ -3,12 +3,14 @@ import { DEFAULT_EXPORT_SETTINGS } from "../domain/exportSettings";
 import { SettingsPopover } from "./SettingsPopover";
 
 describe("SettingsPopover", () => {
-  it("emits compact background, resolution, and fps choices", () => {
+  it("emits compact background, resolution, quality, zoom, and fps choices", () => {
     const onChange = vi.fn();
     render(<SettingsPopover settings={DEFAULT_EXPORT_SETTINGS} onChange={onChange} />);
 
     fireEvent.click(screen.getByRole("button", { name: "GREEN" }));
     fireEvent.click(screen.getByRole("button", { name: "2048" }));
+    fireEvent.click(screen.getByRole("button", { name: "HIGH" }));
+    fireEvent.click(screen.getByRole("button", { name: "WIDE" }));
     fireEvent.click(screen.getByRole("button", { name: "60" }));
 
     expect(onChange).toHaveBeenNthCalledWith(1, {
@@ -20,6 +22,14 @@ describe("SettingsPopover", () => {
       resolution: 2048,
     });
     expect(onChange).toHaveBeenNthCalledWith(3, {
+      ...DEFAULT_EXPORT_SETTINGS,
+      quality: "high",
+    });
+    expect(onChange).toHaveBeenNthCalledWith(4, {
+      ...DEFAULT_EXPORT_SETTINGS,
+      zoom: "wide",
+    });
+    expect(onChange).toHaveBeenNthCalledWith(5, {
       ...DEFAULT_EXPORT_SETTINGS,
       fps: 60,
     });

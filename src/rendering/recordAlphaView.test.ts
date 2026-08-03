@@ -26,6 +26,7 @@ describe("recordAlphaView", () => {
       fps: 24,
       resolution: 512,
       outputPath: "/tmp/loop8-alpha.webm",
+      quality: "high",
       signal: new AbortController().signal,
       onProgress: vi.fn(),
     });
@@ -35,6 +36,7 @@ describe("recordAlphaView", () => {
       width: 512,
       height: 512,
       fps: 24,
+      quality: "high",
     });
     expect(tauri.invoke.mock.calls.filter(([command]) => command === "write_alpha_frame")).toHaveLength(3);
     expect(tauri.invoke).toHaveBeenLastCalledWith("finish_alpha_export");

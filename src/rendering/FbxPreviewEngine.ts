@@ -19,7 +19,12 @@ import {
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import type { ViewAngle } from "../domain/angles";
 import { lockHorizontalRootMotion } from "../domain/animation";
-import type { BackgroundMode, ExportResolution } from "../domain/exportSettings";
+import {
+  CAMERA_ZOOM_FACTORS,
+  type BackgroundMode,
+  type CameraZoom,
+  type ExportResolution,
+} from "../domain/exportSettings";
 
 export interface FbxMetadata {
   clipName: string;
@@ -44,6 +49,9 @@ export class FbxPreviewEngine {
   private playing = false;
   private exportMode = false;
   private backgroundMode: BackgroundMode = "studio";
+  private cameraZoom: CameraZoom = "fit";
+  private baseCameraDistance = 1;
+  private cameraTargetY = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -115,6 +123,12 @@ export class FbxPreviewEngine {
   setBackground(mode: BackgroundMode): void {
     this.backgroundMode = mode;
     this.applyBackground(mode);
+    this.render();
+  }
+
+  setZoom(zoom: CameraZoom): void {
+    this.cameraZoom = zoom;
+    this.applyCameraZoom();
     this.render();
   }
 
@@ -251,12 +265,17 @@ export class FbxPreviewEngine {
     const normalizedBounds = new Box3().setFromObject(object);
     const size = normalizedBounds.getSize(new Vector3());
     const height = Math.max(size.y, 0.1);
-    const targetY = height * 0.48;
-    const distance = height / (2 * Math.tan((this.camera.fov * Math.PI) / 360)) * 1.25;
-    this.camera.position.set(0, targetY, distance);
+    this.cameraTargetY = height * 0.48;
+    this.baseCameraDistance = height / (2 * Math.tan((this.camera.fov * Math.PI) / 360)) * 1.25;
+    this.applyCameraZoom();
+  }
+
+  private applyCameraZoom(): void {
+    const distance = this.baseCameraDistance * CAMERA_ZOOM_FACTORS[this.cameraZoom];
+    this.camera.position.set(0, this.cameraTargetY, distance);
     this.camera.near = Math.max(distance / 100, 0.01);
     this.camera.far = distance * 20;
-    this.camera.lookAt(0, targetY, 0);
+    this.camera.lookAt(0, this.cameraTargetY, 0);
     this.camera.updateProjectionMatrix();
   }
 
@@ -273,7 +292,6 @@ export class FbxPreviewEngine {
   private render(): void {
     if (this.exportMode && this.exportRenderer) {
       this.exportRenderer.render(this.scene, this.exportCamera);
-      return;
     }
     this.renderer.render(this.scene, this.camera);
   }

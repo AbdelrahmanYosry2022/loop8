@@ -89,6 +89,7 @@ function App() {
   const handleSettingsChange = (nextSettings: ExportSettings) => {
     setSettings(nextSettings);
     engineRef.current?.setBackground(nextSettings.background);
+    engineRef.current?.setZoom(nextSettings.zoom);
   };
 
   const handleExport = async () => {
@@ -122,7 +123,10 @@ function App() {
           setMetadata(result);
           setAngle(0);
         },
-        onProgress: setProgress,
+        onProgress: (nextProgress) => {
+          setProgress(nextProgress);
+          setAngle(nextProgress.angle);
+        },
       });
       setStatus("done");
       setMessage(`اتصدّروا ${sources.length * 8} فيديو بنجاح`);
@@ -136,6 +140,7 @@ function App() {
     } finally {
       abortRef.current = null;
       setProgress(null);
+      setAngle(0);
     }
   };
 
@@ -175,6 +180,7 @@ function App() {
           settings={settings}
           sourceCount={sources.length}
           disabled={busy}
+          onAdd={handleNativePick}
           onBatch={handleBatchPick}
           onLoopsChange={setLoops}
           onSettingsChange={handleSettingsChange}

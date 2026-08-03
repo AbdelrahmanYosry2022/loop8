@@ -1,5 +1,10 @@
 import type { LoopCount, ViewAngle } from "../domain/angles";
-import type { BackgroundMode, ExportFps } from "../domain/exportSettings";
+import {
+  VIDEO_BITRATES,
+  type BackgroundMode,
+  type ExportFps,
+  type VideoQuality,
+} from "../domain/exportSettings";
 import type { FbxPreviewEngine } from "./FbxPreviewEngine";
 
 export interface RecordingFormat {
@@ -34,6 +39,7 @@ interface RecordOptions {
   loops: LoopCount;
   fps: ExportFps;
   background: BackgroundMode;
+  quality: VideoQuality;
   signal: AbortSignal;
   onProgress: (progress: number) => void;
 }
@@ -44,6 +50,7 @@ export async function recordView({
   loops,
   fps,
   background,
+  quality,
   signal,
   onProgress,
 }: RecordOptions): Promise<{ blob: Blob; format: RecordingFormat }> {
@@ -59,7 +66,7 @@ export async function recordView({
   const stream = engine.recordingCanvas.captureStream(fps);
   const recorder = new MediaRecorder(stream, {
     mimeType: format.mimeType,
-    videoBitsPerSecond: 8_000_000,
+    videoBitsPerSecond: VIDEO_BITRATES[quality],
   });
   const chunks: BlobPart[] = [];
   recorder.addEventListener("dataavailable", (event) => {

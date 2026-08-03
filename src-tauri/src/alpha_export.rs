@@ -30,9 +30,11 @@ pub fn start_alpha_export(
     width: u32,
     height: u32,
     fps: u32,
+    quality: String,
     state: State<'_, AlphaExportState>,
 ) -> Result<(), String> {
     validate_settings(width, height, fps)?;
+    let (crf, cpu_used) = quality_settings(&quality)?;
     let output_path = validate_output_path(&output_path)?;
     let ffmpeg = find_ffmpeg().ok_or_else(|| {
         "تصدير Alpha محتاج FFmpeg. ثبّته مرة واحدة بالأمر: brew install ffmpeg".to_string()
@@ -64,6 +66,10 @@ pub fn start_alpha_export(
             "-an",
             "-c:v",
             "libvpx-vp9",
+            "-b:v",
+            "0",
+            "-crf",
+            crf,
             "-pix_fmt",
             "yuva420p",
             "-auto-alt-ref",
@@ -75,7 +81,7 @@ pub fn start_alpha_export(
             "-deadline",
             "good",
             "-cpu-used",
-            "4",
+            cpu_used,
         ])
         .arg(&output_path)
         .stdin(Stdio::piped())
@@ -92,6 +98,15 @@ pub fn start_alpha_export(
         output_path,
     });
     Ok(())
+}
+
+fn quality_settings(quality: &str) -> Result<(&'static str, &'static str), String> {
+    match quality {
+        "low" => Ok(("38", "6")),
+        "standard" => Ok(("30", "4")),
+        "high" => Ok(("22", "2")),
+        _ => Err("جودة فيديو Alpha غير مدعومة".into()),
+    }
 }
 
 #[tauri::command]

@@ -1,8 +1,12 @@
 import {
+  CAMERA_ZOOMS,
   EXPORT_FPS_OPTIONS,
   EXPORT_RESOLUTIONS,
+  VIDEO_QUALITIES,
   type BackgroundMode,
+  type CameraZoom,
   type ExportSettings,
+  type VideoQuality,
 } from "../domain/exportSettings";
 
 interface SettingsPopoverProps {
@@ -15,6 +19,18 @@ const BACKGROUNDS: Array<{ value: BackgroundMode; label: string }> = [
   { value: "transparent", label: "ALPHA" },
   { value: "green", label: "GREEN" },
 ];
+
+const QUALITY_LABELS: Record<VideoQuality, string> = {
+  low: "LOW",
+  standard: "MED",
+  high: "HIGH",
+};
+
+const ZOOM_LABELS: Record<CameraZoom, string> = {
+  close: "CLOSE",
+  fit: "FIT",
+  wide: "WIDE",
+};
 
 export function SettingsPopover({ settings, onChange }: SettingsPopoverProps) {
   return (
@@ -47,6 +63,40 @@ export function SettingsPopover({ settings, onChange }: SettingsPopoverProps) {
               onClick={() => onChange({ ...settings, resolution })}
             >
               {resolution}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="setting-row">
+        <span>QUALITY</span>
+        <div className="setting-options">
+          {VIDEO_QUALITIES.map((quality) => (
+            <button
+              key={quality}
+              className={settings.quality === quality ? "is-active" : ""}
+              type="button"
+              title={`${QUALITY_LABELS[quality]} video quality`}
+              onClick={() => onChange({ ...settings, quality })}
+            >
+              {QUALITY_LABELS[quality]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="setting-row">
+        <span>ZOOM</span>
+        <div className="setting-options">
+          {CAMERA_ZOOMS.map((zoom) => (
+            <button
+              key={zoom}
+              className={settings.zoom === zoom ? "is-active" : ""}
+              type="button"
+              title={`${ZOOM_LABELS[zoom]} camera distance`}
+              onClick={() => onChange({ ...settings, zoom })}
+            >
+              {ZOOM_LABELS[zoom]}
             </button>
           ))}
         </div>

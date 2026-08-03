@@ -59,6 +59,7 @@ export async function exportAnimation({
           fps: settings.fps,
           resolution: settings.resolution,
           outputPath: await target.nativePath(fileName),
+          quality: settings.quality,
           signal,
           onProgress: updateProgress,
         });
@@ -69,6 +70,7 @@ export async function exportAnimation({
           loops,
           fps: settings.fps,
           background: settings.background,
+          quality: settings.quality,
           signal,
           onProgress: updateProgress,
         });
