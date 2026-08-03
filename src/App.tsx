@@ -1,13 +1,20 @@
 import { useCallback, useRef, useState } from "react";
-import { exportAnimation, type ExportProgress } from "./application/exportAnimation";
+import { exportBatch, type BatchExportProgress } from "./application/exportBatch";
 import { AngleRail } from "./components/AngleRail";
 import { ControlBar } from "./components/ControlBar";
 import { DropOverlay } from "./components/DropOverlay";
 import { ExportStatus } from "./components/ExportStatus";
 import { PreviewStage } from "./components/PreviewStage";
 import type { LoopCount, ViewAngle } from "./domain/angles";
+import { DEFAULT_EXPORT_SETTINGS, type ExportSettings } from "./domain/exportSettings";
 import { chooseExportTarget } from "./platform/exportFiles";
-import { pickNativeFbxFile, usesNativeFilePicker } from "./platform/importFiles";
+import {
+  createBrowserFbxSource,
+  pickNativeFbxFile,
+  pickNativeFbxFolder,
+  usesNativeFilePicker,
+  type FbxSource,
+} from "./platform/importFiles";
 import type { FbxMetadata, FbxPreviewEngine } from "./rendering/FbxPreviewEngine";
 
 type Status = "empty" | "loading" | "ready" | "exporting" | "done" | "error";
@@ -16,25 +23,31 @@ function App() {
   const engineRef = useRef<FbxPreviewEngine | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [status, setStatus] = useState<Status>("empty");
+  const [sources, setSources] = useState<FbxSource[]>([]);
   const [sourceName, setSourceName] = useState("");
   const [metadata, setMetadata] = useState<FbxMetadata | null>(null);
   const [loops, setLoops] = useState<LoopCount>(1);
+  const [settings, setSettings] = useState<ExportSettings>(DEFAULT_EXPORT_SETTINGS);
   const [angle, setAngle] = useState<ViewAngle>(0);
-  const [progress, setProgress] = useState<ExportProgress | null>(null);
+  const [progress, setProgress] = useState<BatchExportProgress | null>(null);
   const [message, setMessage] = useState("");
 
   const handleEngineReady = useCallback((engine: FbxPreviewEngine) => {
     engineRef.current = engine;
   }, []);
 
-  const loadFbx = async (name: string, buffer: ArrayBuffer) => {
+  const loadSources = async (nextSources: FbxSource[]) => {
     const engine = engineRef.current;
-    if (!engine) return;
+    if (!engine || nextSources.length === 0) return;
     setStatus("loading");
     setMessage("");
+    setSources([]);
+    setMetadata(null);
     try {
-      const result = await engine.load(buffer);
-      setSourceName(name);
+      const first = nextSources[0];
+      const result = await engine.load(await first.read());
+      setSources(nextSources);
+      setSourceName(first.name);
       setMetadata(result);
       setAngle(0);
       setStatus("ready");
@@ -44,15 +57,27 @@ function App() {
     }
   };
 
-  const handleFile = async (file: File) => loadFbx(file.name, await file.arrayBuffer());
+  const handleFile = async (file: File) => loadSources([createBrowserFbxSource(file)]);
 
   const handleNativePick = async () => {
     try {
       const source = await pickNativeFbxFile();
-      if (source) await loadFbx(source.name, source.buffer);
+      if (source) await loadSources([source]);
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "مقدرناش نفتح الملف");
+    }
+  };
+
+  const handleBatchPick = async () => {
+    try {
+      const batch = await pickNativeFbxFolder();
+      if (!batch) return;
+      if (batch.length === 0) throw new Error("الفولدر مفيهوش ملفات FBX");
+      await loadSources(batch);
+    } catch (error) {
+      setStatus(metadata ? "ready" : "error");
+      setMessage(error instanceof Error ? error.message : "مقدرناش نقرأ الفولدر");
     }
   };
 
@@ -61,9 +86,15 @@ function App() {
     engineRef.current?.setAngle(nextAngle);
   };
 
+  const handleSettingsChange = (nextSettings: ExportSettings) => {
+    setSettings(nextSettings);
+    engineRef.current?.setBackground(nextSettings.background);
+    engineRef.current?.setZoom(nextSettings.zoom);
+  };
+
   const handleExport = async () => {
     const engine = engineRef.current;
-    if (!engine || !metadata) return;
+    if (!engine || !metadata || sources.length === 0) return;
     const target = await chooseExportTarget();
     if (!target) return;
 
@@ -71,19 +102,34 @@ function App() {
     abortRef.current = controller;
     setStatus("exporting");
     setMessage("");
-    setProgress({ angle: 0, completedViews: 0, totalProgress: 0 });
+    setProgress({
+      angle: 0,
+      sourceName: sources[0].name,
+      sourceIndex: 0,
+      sourceCount: sources.length,
+      totalProgress: 0,
+    });
 
     try {
-      await exportAnimation({
+      await exportBatch({
         engine,
-        sourceName,
+        sources,
         loops,
+        settings,
         target,
         signal: controller.signal,
-        onProgress: setProgress,
+        onSourceLoaded: (source, result) => {
+          setSourceName(source.name);
+          setMetadata(result);
+          setAngle(0);
+        },
+        onProgress: (nextProgress) => {
+          setProgress(nextProgress);
+          setAngle(nextProgress.angle);
+        },
       });
       setStatus("done");
-      setMessage("اتصدّروا 8 فيديوهات بنجاح");
+      setMessage(`اتصدّروا ${sources.length * 8} فيديو بنجاح`);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         setStatus("ready");
@@ -94,6 +140,7 @@ function App() {
     } finally {
       abortRef.current = null;
       setProgress(null);
+      setAngle(0);
     }
   };
 
@@ -105,7 +152,10 @@ function App() {
       <header>
         <div className="brand"><span>8</span> LOOP</div>
         {hasModel && (
-          <span className="file-name">{sourceName}</span>
+          <div className="source-summary">
+            <span className="file-name">{sourceName}</span>
+            {sources.length > 1 && <span className="batch-count">{sources.length} FBX</span>}
+          </div>
         )}
       </header>
 
@@ -117,6 +167,7 @@ function App() {
             nativePicker={usesNativeFilePicker()}
             onFile={handleFile}
             onNativePick={handleNativePick}
+            onNativeBatch={handleBatchPick}
           />
         )}
         {hasModel && <AngleRail value={angle} disabled={busy} onChange={handleAngle} />}
@@ -124,7 +175,17 @@ function App() {
       </section>
 
       {hasModel && status !== "exporting" && (
-        <ControlBar loops={loops} disabled={busy} onLoopsChange={setLoops} onExport={handleExport} />
+        <ControlBar
+          loops={loops}
+          settings={settings}
+          sourceCount={sources.length}
+          disabled={busy}
+          onAdd={handleNativePick}
+          onBatch={handleBatchPick}
+          onLoopsChange={setLoops}
+          onSettingsChange={handleSettingsChange}
+          onExport={handleExport}
+        />
       )}
       {status === "exporting" && progress && (
         <ExportStatus progress={progress} onCancel={() => abortRef.current?.abort()} />

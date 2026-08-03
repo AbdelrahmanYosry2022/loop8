@@ -19,6 +19,12 @@ import {
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import type { ViewAngle } from "../domain/angles";
 import { lockHorizontalRootMotion } from "../domain/animation";
+import {
+  CAMERA_ZOOM_FACTORS,
+  type BackgroundMode,
+  type CameraZoom,
+  type ExportResolution,
+} from "../domain/exportSettings";
 
 export interface FbxMetadata {
   clipName: string;
@@ -30,26 +36,37 @@ export class FbxPreviewEngine {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(32, 1, 0.01, 1000);
+  private readonly exportCamera = new PerspectiveCamera(32, 1, 0.01, 1000);
   private readonly turntable = new Group();
   private readonly clock = new Clock();
   private readonly observer: ResizeObserver;
+  private exportRenderer: WebGLRenderer | null = null;
+  private floor: Mesh | null = null;
   private model: Group | null = null;
   private mixer: AnimationMixer | null = null;
   private animationDuration = 0;
   private animationFrame = 0;
   private playing = false;
+  private exportMode = false;
+  private backgroundMode: BackgroundMode = "studio";
+  private cameraZoom: CameraZoom = "fit";
+  private baseCameraDistance = 1;
+  private cameraTargetY = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.renderer = new WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+    this.renderer = new WebGLRenderer({
+      canvas,
+      alpha: true,
+      antialias: true,
+      premultipliedAlpha: false,
+      preserveDrawingBuffer: true,
+    });
+    this.configureRenderer(this.renderer);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.outputColorSpace = SRGBColorSpace;
-    this.renderer.toneMapping = ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
-    this.renderer.shadowMap.enabled = true;
-    this.scene.background = new Color("#dfe3e6");
     this.scene.add(this.turntable);
     this.addStudio();
+    this.applyBackground("studio");
 
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(canvas);
@@ -59,6 +76,11 @@ export class FbxPreviewEngine {
 
   get duration(): number {
     return this.animationDuration;
+  }
+
+  get recordingCanvas(): HTMLCanvasElement {
+    if (!this.exportRenderer) throw new Error("محرك التصدير مش جاهز");
+    return this.exportRenderer.domElement;
   }
 
   async load(buffer: ArrayBuffer): Promise<FbxMetadata> {
@@ -98,11 +120,59 @@ export class FbxPreviewEngine {
     this.render();
   }
 
+  setBackground(mode: BackgroundMode): void {
+    this.backgroundMode = mode;
+    this.applyBackground(mode);
+    this.render();
+  }
+
+  setZoom(zoom: CameraZoom): void {
+    this.cameraZoom = zoom;
+    this.applyCameraZoom();
+    this.render();
+  }
+
+  prepareExport(resolution: ExportResolution, background: BackgroundMode): void {
+    this.pause();
+    this.exportMode = true;
+    const exportRenderer = this.getExportRenderer();
+    exportRenderer.setPixelRatio(1);
+    exportRenderer.setSize(resolution, resolution, false);
+    this.exportCamera.copy(this.camera);
+    this.exportCamera.aspect = 1;
+    this.exportCamera.updateProjectionMatrix();
+    this.applyBackground(background);
+    this.render();
+  }
+
+  finishExport(): void {
+    this.exportMode = false;
+    this.applyBackground(this.backgroundMode);
+    this.resize();
+    this.play();
+  }
+
   renderAt(seconds: number): void {
     if (this.mixer && this.animationDuration > 0) {
       this.mixer.setTime(Math.max(0, seconds % this.animationDuration));
     }
     this.render();
+  }
+
+  readRgbaFrame(): Uint8Array {
+    if (!this.exportRenderer) throw new Error("محرك Alpha مش جاهز");
+    const gl = this.exportRenderer.getContext();
+    const width = this.exportRenderer.domElement.width;
+    const height = this.exportRenderer.domElement.height;
+    const rowBytes = width * 4;
+    const source = new Uint8Array(rowBytes * height);
+    const flipped = new Uint8Array(source.length);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    for (let row = 0; row < height; row += 1) {
+      const sourceOffset = (height - row - 1) * rowBytes;
+      flipped.set(source.subarray(sourceOffset, sourceOffset + rowBytes), row * rowBytes);
+    }
+    return flipped;
   }
 
   play(): void {
@@ -128,7 +198,28 @@ export class FbxPreviewEngine {
     this.pause();
     this.observer.disconnect();
     this.removeCurrentModel();
+    this.exportRenderer?.dispose();
     this.renderer.dispose();
+  }
+
+  private configureRenderer(renderer: WebGLRenderer): void {
+    renderer.outputColorSpace = SRGBColorSpace;
+    renderer.toneMapping = ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.shadowMap.enabled = true;
+  }
+
+  private getExportRenderer(): WebGLRenderer {
+    if (!this.exportRenderer) {
+      this.exportRenderer = new WebGLRenderer({
+        alpha: true,
+        antialias: true,
+        premultipliedAlpha: false,
+        preserveDrawingBuffer: true,
+      });
+      this.configureRenderer(this.exportRenderer);
+    }
+    return this.exportRenderer;
   }
 
   private addStudio(): void {
@@ -143,13 +234,26 @@ export class FbxPreviewEngine {
     fill.position.set(-4, 3, 2);
     this.scene.add(fill);
 
-    const floor = new Mesh(
+    this.floor = new Mesh(
       new PlaneGeometry(40, 40),
       new MeshStandardMaterial({ color: "#c8ced2", roughness: 0.92 }),
     );
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    this.scene.add(floor);
+    this.floor.rotation.x = -Math.PI / 2;
+    this.floor.receiveShadow = true;
+    this.scene.add(this.floor);
+  }
+
+  private applyBackground(mode: BackgroundMode): void {
+    if (this.floor) this.floor.visible = mode === "studio";
+    if (mode === "transparent") {
+      this.scene.background = null;
+      this.renderer.setClearAlpha(0);
+      this.exportRenderer?.setClearAlpha(0);
+    } else {
+      this.scene.background = new Color(mode === "green" ? "#00ff00" : "#dfe3e6");
+      this.renderer.setClearAlpha(1);
+      this.exportRenderer?.setClearAlpha(1);
+    }
   }
 
   private normalizeModel(object: Group): void {
@@ -161,16 +265,22 @@ export class FbxPreviewEngine {
     const normalizedBounds = new Box3().setFromObject(object);
     const size = normalizedBounds.getSize(new Vector3());
     const height = Math.max(size.y, 0.1);
-    const targetY = height * 0.48;
-    const distance = height / (2 * Math.tan((this.camera.fov * Math.PI) / 360)) * 1.25;
-    this.camera.position.set(0, targetY, distance);
+    this.cameraTargetY = height * 0.48;
+    this.baseCameraDistance = height / (2 * Math.tan((this.camera.fov * Math.PI) / 360)) * 1.25;
+    this.applyCameraZoom();
+  }
+
+  private applyCameraZoom(): void {
+    const distance = this.baseCameraDistance * CAMERA_ZOOM_FACTORS[this.cameraZoom];
+    this.camera.position.set(0, this.cameraTargetY, distance);
     this.camera.near = Math.max(distance / 100, 0.01);
     this.camera.far = distance * 20;
-    this.camera.lookAt(0, targetY, 0);
+    this.camera.lookAt(0, this.cameraTargetY, 0);
     this.camera.updateProjectionMatrix();
   }
 
   private resize(): void {
+    if (this.exportMode) return;
     const width = Math.max(this.canvas.clientWidth, 1);
     const height = Math.max(this.canvas.clientHeight, 1);
     this.renderer.setSize(width, height, false);
@@ -180,6 +290,9 @@ export class FbxPreviewEngine {
   }
 
   private render(): void {
+    if (this.exportMode && this.exportRenderer) {
+      this.exportRenderer.render(this.scene, this.exportCamera);
+    }
     this.renderer.render(this.scene, this.camera);
   }
 
